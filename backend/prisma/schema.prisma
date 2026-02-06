@@ -1,0 +1,38 @@
+// Prisma schema for Email Job Scheduler
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmailStatus {
+  SCHEDULED
+  SENT
+  FAILED
+}
+
+model EmailJob {
+  id               String      @id @default(uuid())
+  senderEmail      String
+  senderName       String?
+  recipientEmail   String
+  subject          String
+  body             String
+  status           EmailStatus @default(SCHEDULED)
+  scheduledAt      DateTime
+  sentAt           DateTime?
+  attempts         Int         @default(0)
+  lastError        String?
+  externalJobId    String?
+  minDelaySeconds  Int
+  hourlyLimit      Int
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([senderEmail, scheduledAt])
+}
