@@ -1,4 +1,4 @@
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, DelayedError } from 'bullmq';
 import { config } from './config';
 import { connection } from './queue';
 import { prisma } from './db';
@@ -16,10 +16,14 @@ async function processEmail(job: Job) {
 
   const now = new Date();
 
+  const reschedule = async (delayMs: number) => {
+    await job.moveToDelayed(Date.now() + delayMs, job.token);
+    throw new DelayedError();
+  };
+
   if (emailJob.scheduledAt.getTime() > now.getTime()) {
     const delayMs = emailJob.scheduledAt.getTime() - now.getTime();
-    await job.moveToDelayed(Date.now() + delayMs, job.token);
-    return;
+    await reschedule(delayMs);
   }
 
   const hourlyLimit = emailJob.hourlyLimit;
@@ -29,14 +33,12 @@ async function processEmail(job: Job) {
   if (allowed === -1) {
     const nextHour = getNextHourStart(now);
     const delayMs = nextHour.getTime() - now.getTime();
-    await job.moveToDelayed(Date.now() + delayMs, job.token);
-    return;
+    await reschedule(delayMs);
   }
 
   const waitMs = await reserveSendSlot(emailJob.senderEmail, minDelayMs);
   if (waitMs > 0) {
-    await job.moveToDelayed(Date.now() + waitMs, job.token);
-    return;
+    await reschedule(waitMs);
   }
 
   try {
